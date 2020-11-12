@@ -40,33 +40,47 @@ namespace CommandLocker
             });
             UnlockCommand.Subscribe(() =>
             {
-                locker.Release(key);
-                key = Guid.Empty;
+                if (locker.Release(key))
+                {
+                    key = Guid.Empty;
+                }
             });
 
+            var triggerKey = Guid.Empty;
             var count = 0;
             LockTriggerCommand.Subscribe(() =>
             {
                 var locked = locker.Lock(3);
+                if (locked.result) { triggerKey = locked.key; }
             });
             UnlockTriggerCommand.Subscribe(() =>
             {
-                if (key == Guid.Empty) { count++; }
+                if (triggerKey != Guid.Empty) { count++; }
 
                 var result = locker.TryRelease(count);
-                if (result) { count = 0; }
+                if (result)
+                {
+                    triggerKey = Guid.Empty;
+                    count = 0;
+                }
             });
             UnlockForceCommand.Subscribe(() =>
             {
-                locker.ReleaseForce();
+                locker.ReleaseAllForce();
+                key = Guid.Empty;
+                triggerKey = Guid.Empty;
                 count = 0;
             });
             WaitUnlockTriggerDemoCommand.Subscribe(async () =>
             {
                 var locked = locker.Lock(3);
-                Log.Value = "Locked.";
-                await locker.WaitReleaseAsync();
-                Log.Value = "Unlocked.";
+                if (locked.result)
+                {
+                    triggerKey = locked.key;
+                    Log.Value = "Locked.";
+                    await locker.WaitReleaseAsync();
+                    Log.Value = "Unlocked.";
+                }
             });
         }
     }

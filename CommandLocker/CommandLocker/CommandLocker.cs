@@ -7,11 +7,14 @@ using System.Threading.Tasks;
 
 namespace CommandLocker
 {
-    public class CommandLocker<T> where T : IEquatable<T>
+    public class CommandLocker<T>
     {
         public ReactiveProperty<bool> CanExecute { get; }
         private ReactiveProperty<bool> canExcuteWithTrigger { get; }
         public ReactiveProperty<bool> CanExecuteWithTrigger { get; }
+
+        public bool IsLocked => lockKey != Guid.Empty;
+        public bool IsTriggerLocked => lockTriggerKey != Guid.Empty;
 
         private Guid lockKey;
         private object lockObject = new object();
@@ -51,7 +54,7 @@ namespace CommandLocker
             return true;
         }
 
-        public (bool, Guid) Lock(T trigger)
+        public (bool result, Guid key) Lock(T trigger)
         {
             if (lockTriggerKey != Guid.Empty) { return (false, Guid.Empty); }
 
@@ -66,7 +69,7 @@ namespace CommandLocker
         public bool TryRelease(T value, Guid? key = null)
         {
             if (lockTriggerKey == Guid.Empty) { return false; }
-            if (!releaseTrigger.Equals(value)) { return false; }
+            if (!EqualityComparer<T>.Default.Equals(releaseTrigger, value)) { return false; }
             if (key != null && lockTriggerKey != key) { return false; }
 
             lock (lockObject)
@@ -89,6 +92,22 @@ namespace CommandLocker
 
         }
         public void ReleaseForce()
+        {
+            lock (lockObject)
+            {
+                CanExecute.Value = true;
+                lockKey = Guid.Empty;
+            }
+        }
+        public void ReleaseTriggerForce()
+        {
+            lock (lockObject)
+            {
+                canExcuteWithTrigger.Value = true;
+                lockTriggerKey = Guid.Empty;
+            }
+        }
+        public void ReleaseAllForce()
         {
             lock (lockObject)
             {
